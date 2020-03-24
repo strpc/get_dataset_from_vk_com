@@ -22,11 +22,12 @@ class User:
     active = True
     status = '' # closed/opened/hidden/deleted
     id_number = int()
+    full_name = list()
+    description = dict()
     link_profile = str()
     profile_html = str()
     link_album = str()
     html_album = str()
-    full_name = list()
     late_avatar = str()
     late_avatar_jpg = str()
     prelate_avatar = str()
@@ -60,11 +61,11 @@ def parse_main_page(user: User):
     else:
         return
     try: #FIXME:
-        deleted = soup.find('div', {'class': 'message_page_body'}).text.strip()
+        deleted = soup.find('div', {'class': 'message_page_body'})
         if deleted:
             user.status = 'deleted'
             user.active = False
-        print(user.status, user.link_profile)
+            print(user.status, user.link_profile)
     except:
         # print('произошла ошибка при попытке поиска текста "Страница "'
                                             # '"удалена либо ещё не создана."')
@@ -77,82 +78,85 @@ def parse_main_page(user: User):
             img = soup.find('img', {'class': 'page_avatar_img'})
             user.late_avatar_jpg = img.get('src')
             user.full_name = img.get('alt')
-            #
+            # NOTE: доделать дополнение всей информации в user.description
             print(f'Закрытая страница {user.link_profile} {user.late_avatar_jpg}, {user.full_name}')
     except:
         pass
         # print('Произошла ошибка. Эта страница не скрыта')
     
     try:
-        hidden = soup.find('h5', {'class': 'profile_deleted_text'})
-        if hidden:
+        hidden = soup.find('div', {'class': 'page_current_info'}).text
+        if hidden == 'Страница скрыта':
             user.status = 'hidden'
-            user.full_name = soup.find('h1', {'class': 'page_name'})
-        print(f'Скрытая страница {user.link_profile}, {user.full_name}')
+            user.full_name = soup.find('h1', {'class': 'page_name'}).text
+            print(f'Скрытая страница {user.link_profile}, {user.full_name}')
     except:
         # print('Произошла ошибка при опознании скрытой страницы')
         pass
     
     try:
-        opened = soup.find('h1', {'class': 'page_name'})
+        # div = soup.find('div', {'class': 'page_top'})
+        opened = soup.find('a', {'id': 'profile_photo_link'})
         if opened:
             user.status = 'opened'
             user.link_album = f'https://vk.com/album{user.id_number}_0?rev=1'
-            user.full_name = opened.text
-        print(user.status, user.full_name)
+            user.full_name = soup.find('h1', {'class': 'page_name'}).text
+            # NOTE: доделать пополнение всей оставшейся информации в словарь user.description
+            print(user.status, user.full_name)
     except:
         pass
-    
+
+
 async def get_album_page(session: aiohttp.client.ClientSession, user: User):
     '''ЗАПРОСЫ НА СТРАНИЦУ'''
-    if user.link_album == False:
-        return
     async with session.get(url=user.link_album, headers=headers) as response:
-        url = str(response.url)
-        if re.match(r'^https:\/\/vk\.com\/\Z', url) != None:
-            print('error page')
-            user.link_profile = False
-            user.link_album = False
-            user.html_album = False
-            user.full_name = False
-            user.late_avatar = False
-            user.prelate_avatar = False
-        else:
-            user.html_album = await response.text()
+        user.html_album = await response.text()
 
 
 def get_link_avatar(user: User):
-    if user.active:
-        print(user.id_number)
-        soup = BS(user.html_album, 'lxml')
+    # print(user.id_number)
+    soup = BS(user.html_album, 'lxml')
+    try:
         divs = soup.find_all('div', {'class': 'photos_row'})
         user.late_avatar = f"https://vk.com{divs[0].find('a').get('href')}"
         print(f'Добавлена ссылка на последнюю аватарку - {user.late_avatar}')
-    # except:
-    #     # pass
+    except:
+        pass
     #     print('Ошибка при получении ссылки на последнюю аватарку')
     #     print(user.link_album)
-    # try:
+    try:
         divs = soup.find_all('div', {'class': 'photos_row'})
         user.prelate_avatar = f"https://vk.com{divs[1].find('a').get('href')}"
         print(f'Добавлена ссылка на последнюю аватарку - {user.prelate_avatar}')
-    # except:
+    except:
+        pass
     #     print('Ошибка при получении ссылки на предпоследнюю аватарку')
     # print(*link)
     
     
 async def get_full_avatar(session: aiohttp.client.ClientSession, user: User):
-    async with session.get(url=user.late_avatar, headers=headers) as response:
-        user.late_avatar = await response.text()
-    async with session.get(url=user.prelate_avatar, headers=headers) as response:
-        user.prelate_avatar = await response.text()
-    print('hello world')
+    if user.late_avatar:
+        async with session.get(url=user.late_avatar, headers=headers) as response:
+            user.late_avatar = await response.text()
+        with open('ava.html', 'w', encoding='utf-8') as f:
+            f.write(user.late_avatar)
+    if user.prelate_avatar:
+        async with session.get(url=user.prelate_avatar, headers=headers) as response:
+            user.prelate_avatar = await response.text()
+    # print(user.late_avatar)
         
 
-
-# def get_jpg_link(user: User):
-#     soup = BS(user.late_avatar, 'lxml')
-    
+def get_jpg_link(user: User):
+    if user.late_avatar:
+        late = BS(user.late_avatar, 'lxml')
+        div = late.find('div', {'class': 'pv_photo'})
+        user.late_avatar_jpg = div.find('img').get('src')
+        print(user.late_avatar_jpg)
+    if user.prelate_avatar:
+        prelate = BS(user.prelate_avatar, 'lxml')
+        div = prelate.find('div', {'class': 'pv_photo'})
+        user.prelate_avatar_jpg = div.find('img').get('src')
+        print(user.prelate_avatar_jpg)
 
 
 async def run_app(user: User):
@@ -161,16 +165,27 @@ async def run_app(user: User):
         task = asyncio.create_task(get_html_main(session=session, user=user))
         tasks.append(task)
         await asyncio.gather(*tasks)
-
     parse_main_page(user)
     
-    # async with aiohttp.ClientSession() as session:
-    #     task = asyncio.create_task(get_album_page(session=session,
-    #                                                 user=user)
-    #                                 )
-    #     tasks.append(task)
-    #     await asyncio.gather(*tasks)
-    # get_link_avatar(user)
+    
+    if user.link_album:
+        async with aiohttp.ClientSession() as session:
+            task = asyncio.create_task(get_album_page(session=session,
+                                                        user=user)
+                                        )
+            tasks.append(task)
+            await asyncio.gather(*tasks)
+    get_link_avatar(user=user)
+    
+    
+    if user.html_album:
+        async with aiohttp.ClientSession() as session:
+            task = asyncio.create_task(get_full_avatar(session=session,
+                                                        user=user)
+                                        )
+            tasks.append(task)
+            await asyncio.gather(*tasks)
+    # get_jpg_link(user=user)
     
 
 
