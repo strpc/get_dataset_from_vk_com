@@ -9,13 +9,17 @@ from vk_dataset.service import Manager, Grabber
 from vk_dataset.utils import setup_logger
 
 
-async def main():
+async def run_parse():
     # for i in range(20):
     user = User(3)
     manager = Manager(http_client=Client(), user=user, grabber=Grabber())
     await asyncio.gather(manager.grab())
 
 
-if __name__ == '__main__':
+def main():
     setup_logger()
-    asyncio.run(main())
+    asyncio.run(run_parse())
+
+
+if __name__ == '__main__':
+    main()
